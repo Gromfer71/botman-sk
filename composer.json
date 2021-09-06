@@ -49,7 +49,7 @@
     },
     "extra": {
         "branch-alias": {
-            "dev-master": "2.1-dev"
+            "dev-master": "dev-sk-taxi as 2.1-dev"
         },
         "laravel": {
             "providers": [
