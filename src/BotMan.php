@@ -2,6 +2,7 @@
 
 namespace BotMan\BotMan;
 
+use App\Conversations\StartConversation;
 use BotMan\BotMan\Commands\Command;
 use BotMan\BotMan\Commands\ConversationManager;
 use BotMan\BotMan\Drivers\DriverManager;
@@ -32,8 +33,10 @@ use BotMan\BotMan\Middleware\MiddlewareManager;
 use BotMan\BotMan\Traits\HandlesConversations;
 use BotMan\BotMan\Traits\HandlesExceptions;
 use BotMan\BotMan\Traits\ProvidesStorage;
+use BotMan\BotMan\Users\User;
 use Closure;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\Log;
 use Psr\Container\ContainerInterface;
 use Psr\Container\NotFoundExceptionInterface;
 use Symfony\Component\HttpFoundation\Response;
@@ -129,12 +132,8 @@ class BotMan
      */
     public function __construct(CacheInterface $cache, DriverInterface $driver, $config, StorageInterface $storage)
     {
-        if (!isset($config['bot_id'])) {
-            $config['bot_id'] = '';
-        }
-
         $this->cache = $cache;
-        $this->message = new IncomingMessage('', '', '', null, $config['bot_id']);
+        $this->message = new IncomingMessage('', '', '');
         $this->driver = $driver;
         $this->config = $config;
         $this->storage = $storage;
@@ -213,7 +212,17 @@ class BotMan
      */
     public function getConversationAnswer()
     {
+
+//        if($this->getDriver()->getConversationAnswer($this->message) == '/restart') {
+//            $this->userStorage()->delete();
+//            $this->driverStorage()->delete();
+//            $this->startConversation(new StartConversation());
+//
+//        } else {
         return $this->getDriver()->getConversationAnswer($this->message);
+        // }
+
+
     }
 
     /**
@@ -234,11 +243,14 @@ class BotMan
      */
     public function getUser()
     {
+        if($this->getMessage()->getSender() < 0)
+            return new User();
         if ($user = $this->cache->get('user_'.$this->driver->getName().'_'.$this->getMessage()->getSender())) {
             return $user;
         }
 
         $user = $this->getDriver()->getUser($this->getMessage());
+
         $this->cache->put('user_'.$this->driver->getName().'_'.$user->getId(), $user,
             $this->config['user_cache_time'] ?? 30);
 
@@ -440,7 +452,7 @@ class BotMan
                 }
 
                 $this->firedDriverEvents = false;
-                $this->message = new IncomingMessage('', '', '', null, $this->config['bot_id']);
+                $this->message = new IncomingMessage('', '', '');
             }
         } catch (\Throwable $e) {
             $this->exceptionHandler->handleException($e, $this);
@@ -452,6 +464,7 @@ class BotMan
      */
     protected function callMatchingMessages()
     {
+
         $matchingMessages = $this->conversationManager->getMatchingMessages($this->getMessages(), $this->middleware,
             $this->getConversationAnswer(), $this->getDriver());
 
@@ -496,7 +509,7 @@ class BotMan
 
             $parameters = $this->conversationManager->addDataParameters($this->message, $parameters);
 
-            if (call_user_func_array($callback, array_values($parameters))) {
+            if (call_user_func_array($callback, $parameters)) {
                 return;
             }
         }
@@ -535,9 +548,9 @@ class BotMan
     }
 
     /**
-     * @param string|Question|OutgoingMessage $message
+     * @param string|Question $message
      * @param string|array $recipients
-     * @param string|DriverInterface|null $driver
+     * @param DriverInterface|null $driver
      * @param array $additionalParameters
      * @return Response
      * @throws BotManException
@@ -559,12 +572,8 @@ class BotMan
 
         $recipients = \is_array($recipients) ? $recipients : [$recipients];
 
-        if (!isset($this->config['bot_id'])) {
-            $this->config['bot_id'] = '';
-        }
-
         foreach ($recipients as $recipient) {
-            $this->message = new IncomingMessage('', $recipient, '', null, $this->config['bot_id']);
+            $this->message = new IncomingMessage('', $recipient, '');
             $response = $this->reply($message, $additionalParameters);
         }
 
@@ -588,11 +597,12 @@ class BotMan
             if (\is_string($driver)) {
                 $driver = DriverManager::loadFromName($driver, $this->config);
             }
-            $this->message = new IncomingMessage('', $recipient, '', null, $this->config['bot_id']);
+            $this->message = new IncomingMessage('', $recipient, '');
             $this->setDriver($driver);
         }
 
         $response = $this->reply($question, $additionalParameters);
+
         $this->storeConversation(new InlineConversation, $next, $question, $additionalParameters);
 
         return $response;

@@ -2,13 +2,17 @@
 
 namespace BotMan\BotMan\Traits;
 
+use App\Conversations\StartConversation;
+use App\Models\OrderHistory;
 use BotMan\BotMan\Drivers\DriverManager;
 use BotMan\BotMan\Interfaces\ShouldQueue;
 use BotMan\BotMan\Messages\Conversations\Conversation;
 use BotMan\BotMan\Messages\Incoming\IncomingMessage;
 use BotMan\BotMan\Messages\Outgoing\Question;
+use BotMan\BotMan\Users\User;
 use Closure;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\Log;
 use Opis\Closure\SerializableClosure;
 
 trait HandlesConversations
@@ -21,7 +25,7 @@ trait HandlesConversations
     public function startConversation(Conversation $instance, $recipient = null, $driver = null)
     {
         if (! is_null($recipient) && ! is_null($driver)) {
-            $this->message = new IncomingMessage('', $recipient, '', null, $this->config['bot_id']);
+            $this->message = new IncomingMessage('', $recipient, '');
             $this->driver = DriverManager::loadFromName($driver, $this->config);
         }
         $instance->setBot($this);
@@ -165,6 +169,7 @@ trait HandlesConversations
      */
     public function loadActiveConversation()
     {
+
         $this->loadedConversation = false;
 
         Collection::make($this->getMessages())->reject(function (IncomingMessage $message) {
@@ -237,13 +242,39 @@ trait HandlesConversations
             $this->message = $message;
             $this->currentConversationData = $convo;
 
-            if (is_callable($next)) {
-                $this->callConversation($next, $convo, $message, $parameters);
-            } elseif ($toRepeat) {
-                $conversation = $convo['conversation'];
-                $conversation->setBot($this);
-                $conversation->repeat();
-                $this->loadedConversation = true;
+            $user = \App\Models\User::find($this->getUser()->getId());
+            $should_reset = $user->should_reset ?? null;
+            if($should_reset) {
+                $user->should_reset = false;
+                $user->save();
+
+                OrderHistory::cancelAllOrders($user->id);
+                $this->reply(trans('messages.user reseted'));
+                $this->startConversation(new StartConversation());
+                die();
+            }
+
+
+            if($this->getConversationAnswer() == '/restart') {
+                $this->startConversation(new StartConversation());
+                die();
+            } else {
+                try {
+                    if (is_callable($next)) {
+                        $this->callConversation($next, $convo, $message, $parameters);
+                    } elseif ($toRepeat) {
+                        $conversation = $convo['conversation'];
+                        $conversation->setBot($this);
+                        $conversation->repeat();
+                        $this->loadedConversation = true;
+                    }
+                } catch (\Throwable $exception) {
+                    $this->userStorage()->save(['error' => 1]);
+                    Log::error($exception->getMessage());
+                    Log::error($exception->getTraceAsString());
+                    $this->startConversation(new StartConversation());
+                    die();
+                }
             }
         });
     }
