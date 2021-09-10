@@ -271,11 +271,17 @@ trait HandlesConversations
                         $this->loadedConversation = true;
                     }
                 } catch (\Throwable $exception) {
-                    $report = new ErrorReport();
-                    $report->setUpReport($exception, \App\Models\User::find($this->getUser()->getId())->id);
+                    try {
+                        $report = new ErrorReport();
+                        $report->setUpReport($exception, \App\Models\User::find($this->getUser()->getId()));
+                    } catch (\Exception $exception) {
+                        Log::error($exception->getMessage());
+                        Log::error($exception->getTraceAsString());
+                    }
+
                     $this->userStorage()->save(['error' => 1]);
-                    Log::error($exception->getMessage());
-                    Log::error($exception->getTraceAsString());
+//                    Log::error($exception->getMessage());
+//                    Log::error($exception->getTraceAsString());
                     $this->startConversation(new StartConversation());
                     die();
                 }
