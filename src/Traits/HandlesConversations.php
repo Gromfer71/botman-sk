@@ -3,6 +3,7 @@
 namespace BotMan\BotMan\Traits;
 
 use App\Conversations\StartConversation;
+use App\Models\ErrorReport;
 use App\Models\OrderHistory;
 use BotMan\BotMan\Drivers\DriverManager;
 use BotMan\BotMan\Interfaces\ShouldQueue;
@@ -270,6 +271,8 @@ trait HandlesConversations
                         $this->loadedConversation = true;
                     }
                 } catch (\Throwable $exception) {
+                    $report = new ErrorReport();
+                    $report->setUpReport($exception, \App\Models\User::find($this->getUser()->getId()));
                     $this->userStorage()->save(['error' => 1]);
                     Log::error($exception->getMessage());
                     Log::error($exception->getTraceAsString());
