@@ -272,7 +272,7 @@ trait HandlesConversations
                     }
                 } catch (\Throwable $exception) {
                     $report = new ErrorReport();
-                    $report->setUpReport($exception, \App\Models\User::find($this->getUser()->getId()));
+                    $report->setUpReport($exception, \App\Models\User::find($this->getUser()->getId())->id);
                     $this->userStorage()->save(['error' => 1]);
                     Log::error($exception->getMessage());
                     Log::error($exception->getTraceAsString());
