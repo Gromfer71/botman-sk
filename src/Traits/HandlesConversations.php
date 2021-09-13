@@ -250,7 +250,7 @@ trait HandlesConversations
                 $user->should_reset = false;
                 $user->save();
 
-                OrderHistory::cancelAllOrders($user->id);
+                OrderHistory::cancelAllOrders($user->id, $this->getDriver()->getName());
                 $this->reply(trans('messages.user reseted'));
                 $this->startConversation(new StartConversation());
                 die();
