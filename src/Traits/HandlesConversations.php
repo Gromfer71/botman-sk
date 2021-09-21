@@ -280,7 +280,14 @@ trait HandlesConversations
             } else {
                  try {
                      if($user = User::find($this->getUser()->getId())) {
-                         Translator::$lang = LangPackage::find($user->lang_id)->code;
+                         $pack = LangPackage::find($user->lang_id);
+                         if(!$pack) {
+                             $pack = LangPackage::where('code', 'ru')->first();
+                             if(!$pack) {
+                                 $pack = LangPackage::all()->first();
+                             }
+                         }
+                         Translator::$lang = $pack->code ?? 'ru';
                      }
 
                 if (is_callable($next)) {
