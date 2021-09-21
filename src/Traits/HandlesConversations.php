@@ -5,12 +5,14 @@ namespace BotMan\BotMan\Traits;
 use App\Conversations\StartConversation;
 use App\Models\ErrorReport;
 use App\Models\OrderHistory;
+use App\Models\User;
+use App\Services\Translator;
+use Barryvdh\TranslationManager\Models\LangPackage;
 use BotMan\BotMan\Drivers\DriverManager;
 use BotMan\BotMan\Interfaces\ShouldQueue;
 use BotMan\BotMan\Messages\Conversations\Conversation;
 use BotMan\BotMan\Messages\Incoming\IncomingMessage;
 use BotMan\BotMan\Messages\Outgoing\Question;
-use BotMan\BotMan\Users\User;
 use Closure;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Log;
@@ -25,7 +27,7 @@ trait HandlesConversations
      */
     public function startConversation(Conversation $instance, $recipient = null, $driver = null)
     {
-        if (! is_null($recipient) && ! is_null($driver)) {
+        if (!is_null($recipient) && !is_null($driver)) {
             $this->message = new IncomingMessage('', $recipient, '');
             $this->driver = DriverManager::loadFromName($driver, $this->config);
         }
@@ -49,7 +51,7 @@ trait HandlesConversations
             'additionalParameters' => serialize($additionalParameters),
             'next' => $this->prepareCallbacks($next),
             'time' => microtime(),
-        ], $conversation_cache_time ?? $this->config['config']['conversation_cache_time'] ?? 30);
+        ],                $conversation_cache_time ?? $this->config['config']['conversation_cache_time'] ?? 30);
     }
 
     /**
@@ -79,11 +81,15 @@ trait HandlesConversations
      */
     public function touchCurrentConversation()
     {
-        if (! is_null($this->currentConversationData)) {
+        if (!is_null($this->currentConversationData)) {
             $touched = $this->currentConversationData;
             $touched['time'] = microtime();
 
-            $this->cache->put($this->message->getConversationIdentifier(), $touched, $this->config['config']['conversation_cache_time'] ?? 30);
+            $this->cache->put(
+                $this->message->getConversationIdentifier(),
+                $touched,
+                $this->config['config']['conversation_cache_time'] ?? 30
+            );
         }
     }
 
@@ -124,7 +130,7 @@ trait HandlesConversations
      */
     public function serializeClosure(Closure $closure)
     {
-        if ($this->getDriver()->serializesCallbacks() && ! $this->runsOnSocket) {
+        if ($this->getDriver()->serializesCallbacks() && !$this->runsOnSocket) {
             return serialize(new SerializableClosure($closure, true));
         }
 
@@ -137,7 +143,7 @@ trait HandlesConversations
      */
     protected function unserializeClosure($closure)
     {
-        if ($this->getDriver()->serializesCallbacks() && ! $this->runsOnSocket) {
+        if ($this->getDriver()->serializesCallbacks() && !$this->runsOnSocket) {
             return unserialize($closure);
         }
 
@@ -170,13 +176,14 @@ trait HandlesConversations
      */
     public function loadActiveConversation()
     {
-
         $this->loadedConversation = false;
 
         Collection::make($this->getMessages())->reject(function (IncomingMessage $message) {
             return $message->isFromBot();
         })->filter(function (IncomingMessage $message) {
-            return $this->cache->has($message->getConversationIdentifier()) || $this->cache->has($message->getOriginatedConversationIdentifier());
+            return $this->cache->has($message->getConversationIdentifier()) || $this->cache->has(
+                    $message->getOriginatedConversationIdentifier()
+                );
         })->each(function ($message) {
             $message = $this->middleware->applyMiddleware('received', $message);
             $message = $this->middleware->applyMiddleware('captured', $message);
@@ -196,7 +203,13 @@ trait HandlesConversations
                 return;
             }
 
-            $matchingMessages = $this->conversationManager->getMatchingMessages([$message], $this->middleware, $this->getConversationAnswer(), $this->getDriver(), false);
+            $matchingMessages = $this->conversationManager->getMatchingMessages(
+                [$message],
+                $this->middleware,
+                $this->getConversationAnswer(),
+                $this->getDriver(),
+                false
+            );
             foreach ($matchingMessages as $matchingMessage) {
                 $command = $matchingMessage->getCommand();
                 if ($command->shouldStopConversation()) {
@@ -215,7 +228,11 @@ trait HandlesConversations
             if (is_array($convo['next'])) {
                 $toRepeat = false;
                 foreach ($convo['next'] as $callback) {
-                    if ($this->matcher->isPatternValid($message, $this->getConversationAnswer(), $callback['pattern'])) {
+                    if ($this->matcher->isPatternValid(
+                        $message,
+                        $this->getConversationAnswer(),
+                        $callback['pattern']
+                    )) {
                         $parameterNames = $this->compileParameterNames($callback['pattern']);
                         $matches = $this->matcher->getMatches();
 
@@ -246,7 +263,7 @@ trait HandlesConversations
 
             $user = \App\Models\User::find($this->getUser()->getId());
             $should_reset = $user->should_reset ?? null;
-            if($should_reset) {
+            if ($should_reset) {
                 $user->should_reset = false;
                 $user->save();
 
@@ -257,31 +274,35 @@ trait HandlesConversations
             }
 
 
-            if($this->getConversationAnswer() == '/restart') {
+            if ($this->getConversationAnswer() == '/restart') {
                 $this->startConversation(new StartConversation());
                 die();
             } else {
-                try {
-                    if (is_callable($next)) {
-                        $this->callConversation($next, $convo, $message, $parameters);
-                    } elseif ($toRepeat) {
-                        $conversation = $convo['conversation'];
-                        $conversation->setBot($this);
-                        $conversation->repeat();
-                        $this->loadedConversation = true;
-                    }
+                 try {
+                     if($user = User::find($this->getUser()->getId())) {
+                         Translator::$lang = LangPackage::find($user->lang_id)->code;
+                     }
+
+                if (is_callable($next)) {
+                    $this->callConversation($next, $convo, $message, $parameters);
+                } elseif ($toRepeat) {
+                    $conversation = $convo['conversation'];
+                    $conversation->setBot($this);
+                    $conversation->repeat();
+                    $this->loadedConversation = true;
+                }
                 } catch (\Throwable $exception) {
+                     Log::error($exception->getMessage());
+                     Log::error($exception->getTraceAsString());
                     try {
                         $report = new ErrorReport();
-                        $report->setUpReport($exception, \App\Models\User::find($this->getUser()->getId())->id);
+                        $report->setUpReport($exception, \App\Models\User::find($this->getUser()->getId())->id ?? null);
                     } catch (\Exception $exception) {
-                        Log::error($exception->getMessage());
-                        Log::error($exception->getTraceAsString());
+
                     }
 
                     $this->userStorage()->save(['error' => 1]);
-//                    Log::error($exception->getMessage());
-//                    Log::error($exception->getTraceAsString());
+
                     $this->startConversation(new StartConversation());
                     die();
                 }
@@ -299,7 +320,7 @@ trait HandlesConversations
     {
         /** @var \BotMan\BotMan\Messages\Conversations\Conversation $conversation */
         $conversation = $convo['conversation'];
-        if (! $conversation instanceof ShouldQueue) {
+        if (!$conversation instanceof ShouldQueue) {
             $conversation->setBot($this);
         }
         /*
@@ -307,7 +328,11 @@ trait HandlesConversations
          */
         $additionalParameters = Collection::make(unserialize($convo['additionalParameters']));
         if ($additionalParameters->has('__pattern')) {
-            if ($this->matcher->isPatternValid($message, $this->getConversationAnswer(), $additionalParameters->get('__pattern'))) {
+            if ($this->matcher->isPatternValid(
+                $message,
+                $this->getConversationAnswer(),
+                $additionalParameters->get('__pattern')
+            )) {
                 $getter = $additionalParameters->get('__getter');
                 array_unshift($parameters, $this->getConversationAnswer()->getMessage()->$getter());
                 $this->prepareConversationClosure($next, $conversation, $parameters);
