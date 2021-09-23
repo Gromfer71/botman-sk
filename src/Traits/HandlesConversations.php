@@ -278,29 +278,27 @@ trait HandlesConversations
                 $this->startConversation(new StartConversation());
                 die();
             } else {
-                 try {
-                     if($user = User::find($this->getUser()->getId())) {
-                         $pack = LangPackage::find($user->lang_id);
-                         if(!$pack) {
-                             $pack = LangPackage::where('code', 'ru')->first();
-                             if(!$pack) {
-                                 $pack = LangPackage::all()->first();
-                             }
-                         }
-                         Translator::$lang = $pack->code ?? 'ru';
-                     }
+                try {
+                    if($user = User::find($this->getUser()->getId())) {
+                        if(!LangPackage::find($user->lang_id)) {
+                            $user->lang_id = LangPackage::where('code', 'ru')->first()->id;
+                            $user->save();
+                        }
 
-                if (is_callable($next)) {
-                    $this->callConversation($next, $convo, $message, $parameters);
-                } elseif ($toRepeat) {
-                    $conversation = $convo['conversation'];
-                    $conversation->setBot($this);
-                    $conversation->repeat();
-                    $this->loadedConversation = true;
-                }
+                        Translator::$lang = LangPackage::find($user->lang_id)->code ?? 'ru';
+                    }
+
+                    if (is_callable($next)) {
+                        $this->callConversation($next, $convo, $message, $parameters);
+                    } elseif ($toRepeat) {
+                        $conversation = $convo['conversation'];
+                        $conversation->setBot($this);
+                        $conversation->repeat();
+                        $this->loadedConversation = true;
+                    }
                 } catch (\Throwable $exception) {
-                     Log::error($exception->getMessage());
-                     Log::error($exception->getTraceAsString());
+                    Log::error($exception->getMessage());
+                    Log::error($exception->getTraceAsString());
                     try {
                         $report = new ErrorReport();
                         $report->setUpReport($exception, \App\Models\User::find($this->getUser()->getId())->id ?? null);
