@@ -15,6 +15,16 @@ trait ProvidesStorage
             ->setPrefix('user_')
             ->setDefaultKey($this->getMessage()->getSender());
     }
+    /**
+     * @return Storage
+     */
+    public function userStorageFromId($userId)
+    {
+        return (new Storage($this->storage))
+            ->setPrefix('user_')
+            ->setDefaultKey($userId);
+    }
+
 
     /**
      * @return Storage

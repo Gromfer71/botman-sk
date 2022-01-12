@@ -123,6 +123,9 @@ class BotMan
     /** @var bool */
     protected $runsOnSocket = false;
 
+    /** @var StorageInterface */
+    public static $userStorage;
+
     /**
      * BotMan constructor.
      * @param CacheInterface $cache

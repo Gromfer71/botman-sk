@@ -2,12 +2,15 @@
 
 namespace BotMan\BotMan\Traits;
 
+use App\Conversations\RegisterConversation;
 use App\Conversations\StartConversation;
 use App\Models\ErrorReport;
 use App\Models\OrderHistory;
 use App\Models\User;
+use App\Services\Bot\Address;
 use App\Services\Translator;
 use Barryvdh\TranslationManager\Models\LangPackage;
+use BotMan\BotMan\BotMan;
 use BotMan\BotMan\Drivers\DriverManager;
 use BotMan\BotMan\Interfaces\ShouldQueue;
 use BotMan\BotMan\Messages\Conversations\Conversation;
@@ -262,15 +265,28 @@ trait HandlesConversations
             $this->currentConversationData = $convo;
 
             $user = \App\Models\User::find($this->getUser()->getId());
-            $should_reset = $user->should_reset ?? null;
-            if ($should_reset) {
-                $user->should_reset = false;
-                $user->save();
+            if($user) {
+                if (is_null($user->lang_id) || !LangPackage::find($user->lang_id)) {
+                    $user->setDefaultLang();
+                }
+                $package = LangPackage::find($user->lang_id);
+                Translator::$lang = $package->code;
+                $should_reset = $user->should_reset ?? null;
+                if ($should_reset) {
+                    $user->should_reset = false;
+                    $user->save();
 
-                OrderHistory::cancelAllOrders($user->id, $this->getDriver()->getName());
-                $this->reply(trans('messages.user reseted'));
-                $this->startConversation(new StartConversation());
-                die();
+                    OrderHistory::cancelAllOrders($user->id, $this->getDriver()->getName());
+                    $this->reply(Translator::trans('messages.user reseted'));
+                    $this->startConversation(new StartConversation());
+                    die();
+                }
+
+                if($user->isBlocked) {
+                    $this->reply(Translator::trans('messages.you are blocked'));
+                    die();
+                }
+
             }
 
 
@@ -280,13 +296,14 @@ trait HandlesConversations
             } else {
                 try {
                     if($user = User::find($this->getUser()->getId())) {
-                        if(!LangPackage::find($user->lang_id)) {
+                        if(!LangPackage::find($user->lang_id) || !LangPackage::find($user->lang_id)->is_enable ?? true) {
                             $user->lang_id = LangPackage::where('code', 'ru')->first()->id;
                             $user->save();
                         }
 
                         Translator::$lang = LangPackage::find($user->lang_id)->code ?? 'ru';
                     }
+                    BotMan::$userStorage = $this->userStorage();
 
                     if (is_callable($next)) {
                         $this->callConversation($next, $convo, $message, $parameters);
