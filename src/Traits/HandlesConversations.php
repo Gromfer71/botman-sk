@@ -279,12 +279,12 @@ trait HandlesConversations
                     OrderHistory::cancelAllOrders($user->id, $this->getDriver()->getName());
                     $this->reply(Translator::trans('messages.user reseted'));
                     $this->startConversation(new StartConversation());
-                    die();
+                    return;
                 }
 
                 if($user->isBlocked) {
                     $this->reply(Translator::trans('messages.you are blocked'));
-                    die();
+                    return;
                 }
 
             }
@@ -292,7 +292,7 @@ trait HandlesConversations
 
             if ($this->getConversationAnswer() == '/restart') {
                 $this->startConversation(new StartConversation());
-                die();
+                return;
             } else {
                 try {
                     if($user = User::find($this->getUser()->getId())) {
@@ -326,7 +326,7 @@ trait HandlesConversations
                     $this->userStorage()->save(['error' => 1]);
 
                     $this->startConversation(new StartConversation());
-                    die();
+                    return;
                 }
             }
         });
