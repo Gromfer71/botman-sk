@@ -291,7 +291,8 @@ trait HandlesConversations
 
 
             if ($this->getConversationAnswer() == '/restart') {
-                $this->startConversation(new StartConversation());
+		    $this->startConversation(new StartConversation());
+		    die();
                 return;
             } else {
                 try {
@@ -325,7 +326,8 @@ trait HandlesConversations
 
                     $this->userStorage()->save(['error' => 1]);
 
-                    $this->startConversation(new StartConversation());
+		    $this->startConversation(new StartConversation());
+		    die();
                     return;
                 }
             }
