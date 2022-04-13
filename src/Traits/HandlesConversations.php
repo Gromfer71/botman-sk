@@ -286,7 +286,8 @@ trait HandlesConversations
                     $this->reply(Translator::trans('messages.you are blocked'));
                     return;
                 }
-
+            } elseif($lang = $this->userStorage()->get('lang')) {
+                Translator::$lang = $lang;
             }
 
 
